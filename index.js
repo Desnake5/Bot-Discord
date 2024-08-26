@@ -1,94 +1,51 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder, AuditLogEvent } = require('discord.js');
 
-// Create a new Discord client instance
+const { Client, GatewayIntentBits } = require('discord.js');
+const userinfo = require("./components/userinfo")
+const avatar = require("./components/avatar")
+const banner = require("./components/banner")
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildMembers,
         GatewayIntentBits.MessageContent
     ]
 });
 
-// Event listener for when the bot becomes ready
+// Trigger when the bot is ready
 client.once('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
+    console.log(`Logged in as ${client.user.tag}`);
 });
 
-// Event listener for message creation
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return; // Ignore messages from bots
+// Respond to "i" to get the avatar or "b" to get the banner
+client.on('messageCreate', async message => {
+    // Check if the message starts with "i" or "b" or "bo"
+    if (message.content.toLowerCase().startsWith('i') || message.content.toLowerCase().startsWith('b') ||  message.content.toLowerCase().startsWith('bo')) {
+        // Determine if we are fetching avatar or banner
+        let type = "banner";
+        switch (message.content.toLowerCase()) { // b i bo
+            case "i":
+                type = "avatar"
+                break;
+            case "bo":
+                type = "info"
+                break;
+        }
 
-    // Check if the message starts with 'bo'
-    if (message.content.toLowerCase().startsWith('bo')) {
-        try {
-            // Determine if there's a mention in the message
-            const mentionedMember = message.mentions.members.first();
-            const member = mentionedMember || message.member; // Default to the message author if no mention
 
-            if (!member) {
-                return message.channel.send('Could not find the mentioned user.');
-            }
+        // Get the first mentioned user, or the message author if no one is mentioned
+        let user = message.mentions.users.first() || message.author;
 
-            // Find the "verified" role
-            const verificationRole = member.roles.cache.find(role => role.name.toLowerCase().includes('verified'));
-
-            let verifier = 'Unknown'; // Default verifier if none found
-            if (verificationRole) {
-                // Fetch audit logs to determine who gave the role
-                const auditLogs = await message.guild.fetchAuditLogs({
-                    type: AuditLogEvent.MemberRoleUpdate,
-                    limit: 10
-                });
-
-                const logEntry = auditLogs.entries.find(entry =>
-                    entry.target.id === member.id &&
-                    entry.changes.some(change => change.key === '$add' && change.new.some(r => r.id === verificationRole.id))
-                );
-
-                if (logEntry) {
-                    verifier = logEntry.executor.tag;
-                }
-            }
-
-            // Build the roles display with their colors
-            const rolesDisplay = member.roles.cache
-                .filter(role => role.name !== '@everyone') // Exclude the @everyone role
-                .map(role => {
-                    const roleColor = role.hexColor === '#000000' ? '#ffffff' : role.hexColor; // Default to white if the role has no color
-                    return `<span style="color:${roleColor}">${role.name}</span>`; // This is a hypothetical representation. Discord.js cannot display text in color.
-                })
-                .join(', ');
-
-            // Create an embed with member information
-            const embed = new EmbedBuilder()
-                .setColor('#0099ff') // Set a primary color for the embed
-                .setAuthor({ name: member.user.username, iconURL: member.user.displayAvatarURL({ dynamic: true }) })
-                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-                .addFields(
-                    { name: 'Username', value: member.user.username, inline: false },
-                    { name: 'User ID', value: member.user.id, inline: true },
-                    { name: 'Joined Discord', value: `${new Date(member.user.createdTimestamp).toDateString()}`, inline: true },
-                    { name: 'Joined Server', value: `${new Date(member.joinedTimestamp).toDateString()}`, inline: true },
-                    { name: 'Roles', value: rolesDisplay || '@everyone', inline: false },
-                    { name: 'Verified', value: `Yes, verified by ${verifier}`, inline: true }
-                )
-                .setFooter({ text: 'Invites: 0', iconURL: 'https://some.url/to/icon.png' }) // Example footer text
-                .setTimestamp();
-
-            // Send the embed to the channel
-            await message.channel.send({ embeds: [embed] });
-        } catch (error) {
-            console.error('Error fetching member or sending embed:', error);
+        // Handle banner request
+        if (type === 'banner') {
+            await banner(user,client,message);
+        } else if(type === 'avatar') {
+          await avatar(user,message)
+        }else{
+            await userinfo(message);
         }
     }
 });
 
-// Log in to Discord with your bot token
-if (!process.env.TOKEN) {
-    console.error('TOKEN not found in environment variables.');
-    process.exit(1); // Exit if the token is not found
-}
-
+// Log in to Discord with your bot token from the .env file
 client.login(process.env.TOKEN);
